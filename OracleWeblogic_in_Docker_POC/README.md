@@ -1,24 +1,25 @@
 WebLogic 12c in Docker POC Guide
 ===================
 
-#Docker 部署
+#Docker deploy
+1 Install Docker on Oracle Linux 7u3
+Configure local yum repo
 
-1 部署docker
-配置本地yum源
-# cat /etc/yum.repos.d/
-docker.repo  ol7.repo
-[root@node1 ~]# cat /etc/yum.repos.d/docker.repo
-[docker]
-name=docker 1.12
-baseurl=file:///media/docker
-gpgcheck=0
-enabled=1
-[root@node1 ~]# cat /etc/yum.repos.d/ol7.repo
-[ol7]
-name=oracle linux 7 update 3
-baseurl=file:///media/ol7
-gpgcheck=0
-enabled=1
+  # cat /etc/yum.repos.d/
+  docker.repo  ol7.repo
+  [root@node1 ~]# cat /etc/yum.repos.d/docker.repo
+  [docker]
+  name=docker 1.12
+  baseurl=file:///media/docker
+  gpgcheck=0
+  enabled=1
+  [root@node1 ~]# cat /etc/yum.repos.d/ol7.repo
+  [ol7]
+  name=oracle linux 7 update 3
+  baseurl=file:///media/ol7
+  gpgcheck=0
+  enabled=1
+
 
 安装docker并启动
 # yum install docker-engine
