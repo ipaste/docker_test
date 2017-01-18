@@ -561,9 +561,3 @@ ADMIN_HOST: Admin server IP, default is wlsadmin </br>
 CLUSTER_NAME: the cluster name, default is DockerCluster </br>
 
 more information you can found in github:https://github.com/oracle/docker-images/tree/master/OracleWebLogic
-
-然后在管理终端中就能看到一个新的server了
-
-另外，如果想新增的managerserver能够添加到其他Cluster中（默认的cluster名称为DockerCluster），可以在run的时候加上-e CLUSTER_NAME=Cluster-0即可
-
-
