@@ -50,10 +50,10 @@ Storage Driver: devicemapper
 …
 ```
 
-2 setup devicemapper use direct-lvm for performance and production environment
+2 setup devicemapper use direct-lvm for performance and production environment </br>
 The Devicemapper default use loop device, but loop is not supported in production environment, so we change to direct-lvm.
 
-prepare thin-provision lvm pool
+prepare thin-provision lvm pool</br>
 Create PV and VG named docker
 ```
 [root@node2 ~]# fdisk /dev/sda
@@ -134,7 +134,7 @@ Storage Driver: devicemapper
  Thin Pool Minimum Free Space: 10.28 GB
 ```
 
-Load a image and run a container to check lvm status
+Load a image and run a container to check lvm status</br>
 memo: I save the oracle linux 7 images first, if your server can connect docker hub, you can pull the image use command: docker pull oracle/oraclelinux:7 
 
 ```
@@ -429,7 +429,7 @@ sh-4.2# while true; do true;done
 20451 root      20   0   11764   2856   2636 R   5.0  0.0   0:01.90 sh
 
 ```
-max cpu load is 10%
+max cpu load is 10% </br>
 memo: for X86, if you have 8 cpus，the total cpu performance is 800%
 
 # Weblogic container create and use
@@ -442,23 +442,29 @@ https://github.com/oracle/docker-images <br>
 then untar the dockerfiles into node1 <br>
 
 first create OracleJava image：
+```
 /root/docker-images-master/OracleJava
 [root@node1 OracleJava]# cp /root/server-jre-8u112-linux-x64.tar.gz  ./java-8/
 [root@node1 OracleJava]# cd java-8/
 [root@node1 java-8]# ls
 build.sh    server-jre-8u101-linux-x64.tar.gz.download
 Dockerfile  server-jre-8u112-linux-x64.tar.gz
-在执行下面的build命令之前，需要保证系统中有oraclelinux:lastest的镜像，如果没有，需要找到一个本地的版本，然后用docker tag命令生成一个：
+```
+Because this dockfile use "FROM oraclelinux:lastest", so we need tag a oracle linux 7 image.
+```
 # docker tag 10.1.107.1:5000/oraclelinux:7 oraclelinux:latest
 # docker images
 REPOSITORY                         TAG                 IMAGE ID            CREATED             SIZE
 10.1.107.1:5000/oraclelinux        7                   accae9d046b5        3 weeks ago         219.4 MB
 oraclelinux                        latest              accae9d046b5        3 weeks ago         219.4 MB
-
-然后执行脚本生成java镜像
+```
+Create docker JAVA image 
+```
 [root@node1 java-8]# ./build.sh
+```
 
-基于OracleJRE环境的镜像，生成Weblogic的镜像（空的weblogic）
+base on Oracle Java Image, Create Weblogic image
+```
 [root@node1 dockerfiles]# pwd
 /root/docker-images-master/OracleWebLogic/dockerfiles
 [root@node1 dockerfiles]# cp /root/fmw_12.2.1.2.0_wls_Disk1_1of1.zip ./12.
@@ -466,9 +472,15 @@ oraclelinux                        latest              accae9d046b5        3 wee
 [root@node1 dockerfiles]# cp /root/fmw_12.2.1.2.0_wls_Disk1_1of1.zip ./12.2.1.2/
 
 [root@node1 dockerfiles]# ./buildDockerImage.sh -v 12.2.1.2 -g
+```
 
-接下来，利用sample里面的例子，生成一个weblogic domain的镜像：
-注意，在例子里面只有12.2.1-domain，我们需要将这个目录拷贝一个，并且修改里面的dockerfile文件
+Then wo use sample, create weblogic domain image:<br>
+memo: we only have "12.2.1-domain" in example, so we need copy 12.2.1-domain to 12.2.1.2-domain and modify it use oracle/weblogic:12.2.1.2-generic base-image:
+```
+[root@node1 samples]# docker  images
+REPOSITORY                         TAG                 IMAGE ID            CREATED             SIZE
+oracle/weblogic                    12.2.1.2-generic    6099f5cd1ca2        About an hour ago   2.049 GB
+oracle/serverjre                   8                   af61f5a90c03        2 hours ago         376.6 MB
 
 [root@node1 samples]# pwd
 /root/docker-images-master/OracleWebLogic/samples
@@ -477,51 +489,57 @@ oraclelinux                        latest              accae9d046b5        3 wee
 # Pull base image
 # ---------------
 FROM oracle/weblogic:12.2.1.2-generic
-这是因为我们之前生成的镜像是generic版本的，如下：
-[root@node1 samples]# docker  images
-REPOSITORY                         TAG                 IMAGE ID            CREATED             SIZE
-oracle/weblogic                    12.2.1.2-generic    6099f5cd1ca2        About an hour ago   2.049 GB
-oracle/serverjre                   8                   af61f5a90c03        2 hours ago         376.6 MB
+...
 
 [root@node1 samples]# cd 12212-domain
-[root@node1 12212-domain]# ./build.sh welcome1   (welcome1是登录admin server的密码）
-这个地方，按照脚本生成的image名字是12212-domain:latest, 如果希望修改镜像的名字，可以修改build.sh文件：
+[root@node1 12212-domain]# ./build.sh welcome1  
+```
+memo: "welcome1" is the weblogic login password. and after build, you could create a image named 12212-domain:latest. if you want modify the name, you need modify build.sh.
+```
 [root@node1 12212-domain]# cat build.sh
 #!/bin/sh
 if [ "$#" -eq 0 ]; then echo "Inform a password for the domain as first argument."; exit; fi
 docker build --build-arg ADMIN_PASSWORD=$1 -t 12212-domain .
-可以将12212-domain修改为wls-domain:12212
-目前可以使用的镜像如下：
+```
+
+Now,we have some images:
+```
 [root@node1 samples]# docker  images
 REPOSITORY                         TAG                 IMAGE ID            CREATED             SIZE
 12212-domain                       latest              46ed643ad16d        About an hour ago   2.05 GB
 oracle/weblogic                    12.2.1.2-generic    6099f5cd1ca2        About an hour ago   2.049 GB
 oracle/serverjre                   8                   af61f5a90c03        2 hours ago         376.6 MB
+```
 
-
-3 启动一个weblogic容器
-首先启动weblogic的admin server
+3 Start Weblogic</br>
+Fristly, start weblogic admin server
+```
 [root@node1 ~]# docker run  -d --net=pub_net --ip=10.1.107.6 --name=wls_admin 12212-domain
 [root@node1 ~]# docker ps
 CONTAINER ID        IMAGE                          COMMAND                  CREATED             STATUS              PORTS                    NAMES
 ff908e9df5bd        12212-domain                   "startWebLogic.sh"       About an hour ago   Up About an hour                             wls_admin
+```
+Now you can visit http://10.1.107.6:8001/console and login use weblogic/welcome1
 
-这时候，访问 http://10.1.107.6:8001/console 就可以访问admin了，用户名为weblogic，密码就是刚才设置的welcome1
-
-接下来启动一个managed server
+Next, Start a Managed server
+```
 [root@node1 ~]# docker run -d --net=pub_net --ip=10.1.107.7 --name=wls_server -e ADMIN_HOST=10.1.107.6 12212-domain createServer.sh
 [root@node1 ~]# docker logs --tail=all 3b
 …
 <Jan 17, 2017, 1:40:41,12 PM UTC> <Notice> <WebLogicServer> <BEA-000360> <The server started in RUNNING mode.>
 <Jan 17, 2017, 1:40:41,23 PM UTC> <Notice> <WebLogicServer> <BEA-000365> <Server state changed to RUNNING.>
+```
 
-在进到界面中看看服务状态是什么样子的
+Please check weblogic status in Weblogic-Admin
 
-接下来在另一台服务器上启动managed server
-首先将我们做好的镜像push到registry中
+Now, we start a weblogic Managed server on node2</br>
+push images into registry
+```
 [root@node1 12212-domain]# docker tag 12212-domain:latest 10.1.107.1:5000/wls-domain:12.2.1.2
 [root@node1 12212-domain]# docker push 10.1.107.1:5000/wls-domain:12.2.1.2
-将registry的key拷贝到node2上
+```
+If you havn't copy the key to node2, run command in node1:
+```
 [root@node1 12212-domain]# cd /etc/docker/certs.d/
 [root@node1 certs.d]# ls
 10.1.107.1:5000
@@ -529,18 +547,23 @@ ff908e9df5bd        12212-domain                   "startWebLogic.sh"       Abou
 10.1.107.1:5000
 [root@node1 certs.d]# cd ../
 [root@node1 docker]# scp -r certs.d/ root@10.1.107.2:/etc/docker/
+```
 
-在node2上下载镜像
+pull weblogic images and run weblogic Managed Server on node2:
+```
 [root@node2 docker]# docker pull 10.1.107.1:5000/wls-domain:12.2.1.2
-然后运行managed server
-docker run -d --net=pub_net --ip=10.1.107.8 --name=wls_server3 -e ADMIN_HOST=10.1.107.6 10.1.107.1:5000/wls-domain:12.2.1.2 createServer.sh
+[root@node2 docker]# docker run -d --net=pub_net --ip=10.1.107.8 --name=wls_server3 -e ADMIN_HOST=10.1.107.6 10.1.107.1:5000/wls-domain:12.2.1.2 createServer.sh
+```
+Then you can found new server in Weblogic Admin.
+
+Memo: when run weblogic managed server container, you can use some ENV for configure it,mostly use ENV is below:</br>
+ADMIN_HOST: Admin server IP, default is wlsadmin </br>
+CLUSTER_NAME: the cluster name, default is DockerCluster </br>
+
+more information you can found in github:https://github.com/oracle/docker-images/tree/master/OracleWebLogic
+
 然后在管理终端中就能看到一个新的server了
 
 另外，如果想新增的managerserver能够添加到其他Cluster中（默认的cluster名称为DockerCluster），可以在run的时候加上-e CLUSTER_NAME=Cluster-0即可
 
-
-4 在容器中挂在NFS存储
-
-在所有的节点上安装nfs应用
-# yum install -y nfs-utils
 
