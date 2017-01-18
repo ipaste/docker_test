@@ -1,27 +1,34 @@
 WebLogic 12c in Docker POC Guide
 ===================
+We have 2 server installed Oracle Linux 7 update 3
+node1: 10.1.107.1
+node2: 10.1.107.2
+Configure bond0 use 2 network.
 
 #Docker deploy
+
 1 Install Docker on Oracle Linux 7u3
-Configure local yum repo
 
-  # cat /etc/yum.repos.d/
-  docker.repo  ol7.repo
-  [root@node1 ~]# cat /etc/yum.repos.d/docker.repo
-  [docker]
-  name=docker 1.12
-  baseurl=file:///media/docker
-  gpgcheck=0
-  enabled=1
-  [root@node1 ~]# cat /etc/yum.repos.d/ol7.repo
-  [ol7]
-  name=oracle linux 7 update 3
-  baseurl=file:///media/ol7
-  gpgcheck=0
-  enabled=1
+Configure local yum repo(you can use "http://public-yum.oracle.com" and enable addon channel)
+```
+# cat /etc/yum.repos.d/
+docker.repo  ol7.repo
+[root@node1 ~]# cat /etc/yum.repos.d/docker.repo
+[docker]
+name=docker 1.12
+baseurl=file:///media/docker
+gpgcheck=0
+enabled=1
+[root@node1 ~]# cat /etc/yum.repos.d/ol7.repo
+[ol7]
+name=oracle linux 7 update 3
+baseurl=file:///media/ol7
+gpgcheck=0
+enabled=1
+```
 
-
-安装docker并启动
+Install Docker and Start Docker engine service
+```
 # yum install docker-engine
 # systemctl enable docker
 Created symlink from /etc/systemd/system/multi-user.target.wants/docker.service to /usr/lib/systemd/system/docker.service.
@@ -41,24 +48,27 @@ Storage Driver: devicemapper
  Data file: /dev/loop0
  Metadata file: /dev/loop1
 …
+```
 
-2 设置devicemapper采用direct-lvm
-准备thin-provision的lvm pool
+2 setup devicemapper use direct-lvm for performance and production environment
+The Devicemapper default use loop device, but loop is not supported in production environment, so we change to direct-lvm.
 
-增加一个分区sda3
+prepare thin-provision lvm pool
+Create PV and VG named docker
+```
 [root@node2 ~]# fdisk /dev/sda
 Device Boot      Start         End      Blocks   Id  System
 /dev/sda1   *        2048     2099199     1048576   83  Linux
 /dev/sda2         2099200   374484991   186192896   8e  Linux LVM
 /dev/sda3       374484992   585871963   105693486   83  Linux
-
-将sda3配置成为名字为docker的vg
 # pvcreate /dev/sda3
   Physical volume "/dev/sda3" successfully created.
 # vgcreate docker /dev/sda3
   Volume group "docker" successfully created
+```
 
-创建thin pool
+Create thin pool
+```
 #  lvcreate --wipesignatures y -n thinpool docker -l 95%VG
   Logical volume "thinpool" created.
 # lvcreate --wipesignatures y -n thinpoolmeta docker -l 1%VG
@@ -68,8 +78,10 @@ Device Boot      Start         End      Blocks   Id  System
   WARNING: Converting logical volume docker/thinpool and docker/thinpoolmeta to thin pool's data and metadata volumes with metadata wiping.
   THIS WILL DESTROY CONTENT OF LOGICAL VOLUME (filesystem etc.)
   Converted docker/thinpool to thin pool.
+```
 
-配置thinpool的自动扩展属性
+Configure thinpool autoentend
+```
 # vi /etc/lvm/profile/docker-thinpool.profile
 activation {
     thin_pool_autoextend_threshold=80
@@ -78,17 +90,24 @@ activation {
 
 #  lvchange --metadataprofile docker-thinpool docker/thinpool
   Logical volume docker/thinpool changed.
+```
 
-查看thinpool状态
+check thinpool status
+```
 [root@node1 ~]# lvs -o+seg_monitor
   LV       VG     Attr       LSize   Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert Monitor
   thinpool docker twi-a-t---  95.75g             0.00   0.01                             monitored
+```
 
-修改docker的配置文件，使docker使用lvm
+Configure docker to use lvm
+```
 # cat /etc/sysconfig/docker-storage
 DOCKER_STORAGE_OPTIONS = --storage-driver=devicemapper --storage-opt dm.fs=xfs --storage-opt dm.thinpooldev=/dev/mapper/docker-thinpool --storage-opt dm.use_deferred_removal=true
+```
 
-清除docker现有数据并启动docker
+Clear docker data and restart docker(you need backup your /var/lib/docker directory first)
+```
+[root@node1 docker.service.d]# systemctl stop docker
 # rm -rf /var/lib/docker/*
 [root@node1 docker.service.d]# systemctl daemon-reload
 [root@node1 docker.service.d]# systemctl start docker
@@ -113,8 +132,12 @@ Storage Driver: devicemapper
  Metadata Space Total: 1.082 GB
  Metadata Space Available: 1.082 GB
  Thin Pool Minimum Free Space: 10.28 GB
+```
 
-可以看到，docker已经使用了thinpool作为存储空间,现在启动一个容器看看
+Load a image and run a container to check lvm status
+memo: I save the oracle linux 7 images first, if your server can connect docker hub, you can pull the image use command: docker pull oracle/oraclelinux:7 
+
+```
 # docker load -i docker_image_oraclelinux_7.tar
 1cd9d5368290: Loading layer 228.6 MB/228.6 MB
 Loaded image: localhost:5000/oraclelinux:7
@@ -126,15 +149,21 @@ CONTAINER ID        IMAGE                          COMMAND             CREATED  
 # lvs -o+seg_monitor
   LV       VG     Attr       LSize   Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert Monitor
   thinpool docker twi-aot---  95.75g             0.29   0.02                             monitored
-可以看到，已经使用了thinpool的空间
+```
+we can found the image use thinpool space.
 
-3 设置docker的网络为自定义的bridge
+3 Configure Docker use Bridge network and connect outside direct.
 
-安装网络工具
+Docker container use docker0 bridge and auto-setup the ip(172.x.x.x). we can't connect the container ousite server(must use port remap or overlay network), but remap and overlay network is not stable enough. so we need connect docker to ouside direct and setup ip manualy.
+
+Install net tools
+```
 # yum install bridge-utils
 # yum install net-tools
+```
 
-创建自定义网络pub_net
+Creat a pub_net use mvcvlan.
+```
 # docker network ls
 NETWORK ID          NAME                DRIVER              SCOPE
 b3a5a54e4101        bridge              bridge              local
@@ -142,22 +171,30 @@ b3a5a54e4101        bridge              bridge              local
 f139e01dbc6a        none                null                local
 # docker network create -d macvlan --subnet=10.1.107.0/26 --gateway=10.1.107.62 -o parent=bond0 -o macvlan_mode=bridge pub_net
 797a015f17a9a6d069f867c17805d599f8547175b82c4ead82dafc76ec505663
+```
 
-运行2个容器并设置IP进行测试
-# docker run -itd --net=pub_net --ip=10.1.107.4 --name=
-
-
-
-04 localhost:5000/oraclelinux:7 /bin/sh
+run 2 container and setup ip.
+```
+# docker run -itd --net=pub_net --ip=10.1.107.4 --name=test04 localhost:5000/oraclelinux:7 /bin/sh
 cd7458d407df5158e51ad4f19e16e3451933751387cbfe7971f7e12ed1678950
 [root@node1 ~]# docker run -itd --net=pub_net --ip=10.1.107.5 --name=test05 localhost:5000/oraclelinux:7 /bin/sh
 4c9b4e1e284871679bb53661f3bf6702428b285db7898e6167fc51f595f65a2b
+```
 
-正常情况下，无法ping通本机，但是容器和容器之间，容器和外面物理机，容器和外面物理机里的容器都是可以ping通的
+Use ping test
+```
+# docker exec -it cd ping 10.1.107.4        OK
+# docker exec -it cd ping 10.1.107.5        OK
+# docker exec -it cd ping 10.1.107.2        OK
+# docker exec -it cd ping 10.1.107.1        ERROR
+```
+It's work, Because MACVLAN can't connect the docker to local network. so container can't ping host network. Please search MACVLAN document
 
-在虚拟化中，需要设置网络为混杂模式才能实现通讯
+If you use virtualbox or vmware, you need open the network promisc mode,(both in virtualbox and in host os)
+```
 # ifconfig eth0 promisc
 # ifconfig eth0 -promisc
+```
 
 二 docker registry部署 （只在node1上操作）
 
