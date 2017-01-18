@@ -1,9 +1,9 @@
 WebLogic 12c in Docker POC Guide
 ===================
-We have 2 server installed Oracle Linux 7 update 3
-node1: 10.1.107.1
-node2: 10.1.107.2
-Configure bond0 use 2 network.
+We have 2 server installed Oracle Linux 7 update 3 <br>
+node1: 10.1.107.1 <br>
+node2: 10.1.107.2 <br>
+Configure bond0 use 2 network. <br>
 
 #Docker deploy
 
@@ -196,23 +196,21 @@ If you use virtualbox or vmware, you need open the network promisc mode,(both in
 # ifconfig eth0 -promisc
 ```
 
-二 docker registry部署 （只在node1上操作）
+#Docker local registry deploy （only for node1）
+We deploy local registry on node1
 
-1 部署docker registry
-
-load已经下载好的registry的docker image
+1 Install docker registry
+```
 [root@node1 ~]# docker load -i docker_image_registry_2.tar
-
-准备TLS的认证key
 [root@node1 ~]# mkdir -p /var/lib/registry/conf.d
 [root@node1 ~]# cd /var/lib/registry/conf.d/
-由于我们使用IP进行访问，所以，需要在生成证书前，修改文件
 [root@node1 conf.d]# vi /etc/pki/tls/openssl.cnf  增加一行：
 [ v3_ca ]  
 subjectAltName = IP:10.1.107.1
+```
+memo: if you havn't modify openssl.cnf, you will meet the error:"cannot validate certificate for 10.1.107.1 because it doesn't contain any IP SANs… "
 
-要不然访问registry的时候，会出现错误cannot validate certificate for 10.1.107.1 because it doesn't contain any IP SANs… 
-
+```
 [root@node1 conf.d]# openssl req -newkey rsa:4096 -nodes -sha256 -keyout domain.key -x509 -days 3650 -out domain.crt
 Generating a 4096 bit RSA private key
 ...............++
@@ -238,12 +236,13 @@ domain.crt  domain.key
 [root@node1 conf.d]# chmod 600 domain.key
 [root@node1 conf.d]# mkdir -p /etc/docker/certs.d/10.1.107.1:5000
 [root@node1 conf.d]# cp /var/lib/registry/conf.d/domain.crt /etc/docker/certs.d/10.1.107.1:5000/ca.crt
-由于selinux的原因
 [root@node1 conf.d]# chcon -Rt svirt_sandbox_file_t /var/lib/registry/conf.d/
 [root@node1 lib]# chcon -Rt svirt_sandbox_file_t /var/lib/registry/
-要不然后面会出现权限问题
+```
+you need modify the file content because SELinux
 
-启动registry，使用刚才创建的key
+Start registry use key
+```
 [root@node1 conf.d]# docker run -d -p 5000:5000 --name registry --restart=always \
 -v /var/lib/registry:/registry_data \
 -e REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY=/registry_data \
@@ -261,8 +260,10 @@ tcp6       0      0 ::1:25                  :::*                    LISTEN      
 [root@node1 ~]# docker ps
 CONTAINER ID        IMAGE               COMMAND                  CREATED             STATUS              PORTS                    NAMES
 5aa63079866a        registry:2          "/entrypoint.sh /etc/"   39 minutes ago      Up About a minute   0.0.0.0:5000->5000/tcp   registry
+```
 
-2 上传ol6 和 ol7 的docker image到docker registry中
+2 upload ol6 and ol7 docker image into docker registry
+```
 [root@node1 ~]# docker load -i docker_image_oraclelinux_6.tar
 e029908bae4b: Loading layer 164.9 MB/164.9 MB
 Loaded image: oracle/oraclelinux:6
@@ -278,34 +279,34 @@ oracle/oraclelinux           6                   0636f157b6b8        3 weeks ago
 [root@node1 ~]# docker push 10.1.107.1:5000/registry
 [root@node1 ~]# docker push 10.1.107.1:5000/oraclelinux:7
 [root@node1 ~]# docker push 10.1.107.1:5000/oraclelinux:6
-
-删掉本地的image，然后尝试从registry中pull
+```
+have a test:
+```
 [root@node1 ~]# docker rmi 10.1.107.1:5000/oraclelinux:7
-(如果删不掉，先删除和该镜像相关的container
 [root@node1 ~]# docker pull 10.1.107.1:5000/oraclelinux:7
 7: Pulling from oraclelinux
 2af59c6d346c: Extracting 48.46 MB/78.73 MB
+```
 
-在node2和node3上配置证书
-从node1上拷贝证书到node3上
-[root@node1 docker]# scp -r certs.d/ root@10.1.107.3:/etc/docker/
-
-重启node3的docker
+configure node2 use this registry:
+```
+[root@node1 docker]# scp -r certs.d/ root@10.1.107.2:/etc/docker/
 [root@node3 docker]# systemctl restart docker
-下载镜像
 [root@node3 docker]# docker pull 10.1.107.1:5000/oraclelinux:7
+```
 
-三 容器的启动、停止
+# Use Docker
 
-1 容器的创建、启动、停止、删除操作
-启动容器
+1 container create\start\stop\delete
+```
 [root@node1 docker]# docker run -itd --name testc01 oraclelinux:latest /bin/sh
 44c3664bbfb0856ada79c70cc4b13c24af61d2147f863d653f9729917f2d8616
-查看所有运行容器
 [root@node1 docker]# docker ps
 CONTAINER ID        IMAGE                          COMMAND                  CREATED             STATUS              PORTS                    NAMES
 44c3664bbfb0        oraclelinux:latest             "/bin/sh"                5 seconds ago       Up 4 seconds                                 testc01
-查看容器信息
+```
+inspect docker container message
+```
 [root@node1 docker]# docker inspect 44
 [
     {
@@ -333,8 +334,10 @@ CONTAINER ID        IMAGE                          COMMAND                  CREA
                     "MacAddress": "02:42:ac:11:00:03"
                 }
 …
+```
 
-进入容器
+go into container:
+```
 [root@node1 docker]# docker exec -it 44 /bin/sh
 sh-4.2# ls
 bin  boot  dev	etc  home  lib	lib64  media  mnt  opt	proc  root  run  sbin  srv  sys  tmp  usr  var
@@ -359,45 +362,57 @@ root        15     7  0 15:24 ?        00:00:00 ps -ef
 
 sh-4.2# exit
 exit
+```
 
-停止容器
+stop container
+```
 [root@node1 docker]# docker stop 44
 44
 [root@node1 docker]# docker ps -a|grep 44
 44c3664bbfb0        oraclelinux:latest             "/bin/sh"                8 minutes ago       Exited (137) 34 seconds ago                            testc01
+```
 
-删除容器
+delete container
+```
 [root@node1 docker]# docker rm 44
 44
 [root@node1 docker]# docker ps -a|grep 44
 [root@node1 docker]#
+```
 
-2 指定容器IP
-容器指定IP必须是自定义的网络，例如我们在上一过程中创建的pub_net
-指定IP创建容器
+2 run container use user-define network and setup ip
+
+memo:the network must be user-define network by "docker network create" command
+```
 # docker run -itd --net=pub_net --ip=10.1.107.4 --name=test04 localhost:5000/oraclelinux:7 /bin/sh
-具体测试过程在第二部分网络配置上已经描述
+```
 
-3 添加容器CPU限制和内存限制以及其他资源限制
-容器可以添加CPU、MEM限制，我们在这里只演示对CPU的限制
+3 Container cpu quota
+docker can limited cpu\mem\io for a container, we demo the CPU quota setup:
+```
 [root@node1 docker]# docker run -itd --cpu-period=10000 --cpu-quota=1000 --name=testc03 oraclelinux:latest /bin/sh
 72c0d8c42421df45256b0d226fd671434e3dd1f0a6be4d4aa58600b5bdfe9b3d
-调度周期为10ms，给该容器的配额是1ms，也就是10%的CPU
+```
+period is 10ms，and this container cpu quota is 1ms，so, it can use 10% CPU max
 
-进入容器运行死循环
+exec cpu load in container:
+```
 [root@node1 docker]# docker exec -it 72 /bin/sh
 sh-4.2# while true; do true;done
-在节点外查看CPU状态
+```
+lockup the cpu status in node1:
+```
 [root@node1 data]# top
 …
 %Cpu17 : 10.6 us,  0.0 sy,  0.0 ni, 89.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st
   PID USER      PR  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND
 20401 root      20   0   11764   2916   2580 R  10.0  0.0   0:05.62 sh
-针对CPU17，单进程只能占用10%的资源，我们在启动一个死循环进程
+```
+exec another cpu load.
+```
 [root@node1 ~]# docker exec -it 72 /bin/sh
 sh-4.2# while true; do true;done
 
-查看CPU状态
 [root@node1 data]# top
 %Cpu2  :  0.0 us,  0.3 sy,  0.0 ni, 99.7 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st
 %Cpu3  :  0.0 us,  0.0 sy,  0.0 ni,100.0 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st
@@ -413,16 +428,20 @@ sh-4.2# while true; do true;done
 20401 root      20   0   11764   2916   2580 R   5.0  0.0   0:16.96 sh
 20451 root      20   0   11764   2856   2636 R   5.0  0.0   0:01.90 sh
 
-可以看出，仍然只能占用总共10%的CPU资源（注意：在X86中，如果有8个CPU，那么CPU的总能力为800%）
+```
+max cpu load is 10%
+memo: for X86, if you have 8 cpus，the total cpu performance is 800%
 
+# Weblogic container create and use
 
-四 容器镜像的创建、上传、使用
+1 create weblogic container
 
-1 创建weblogic容器
+download server-jre-8u112-linux-x64.tar.gz and fmw_12.2.1.2.0_wls_Disk1_1of1.zip from oracle. <br>
+download oracle image files from github: <br>
+https://github.com/oracle/docker-images <br>
+then untar the dockerfiles into node1 <br>
 
-从Oracle官网下载server-jre-8u112-linux-x64.tar.gz和fmw_12.2.1.2.0_wls_Disk1_1of1.zip
-
-首先生成JRE环境的镜像：
+first create OracleJava image：
 /root/docker-images-master/OracleJava
 [root@node1 OracleJava]# cp /root/server-jre-8u112-linux-x64.tar.gz  ./java-8/
 [root@node1 OracleJava]# cd java-8/
