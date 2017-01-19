@@ -9,7 +9,7 @@ Configure bond0 use 2 network. <br>
 
 1 Install Docker on Oracle Linux 7u3
 
-Configure local yum repo(you can use "http://public-yum.oracle.com" and enable addon channel)
+Configure local yum repo(you can use "http://public-yum.oracle.com" and enable addon channel, I had downloaded the docker package and put them into /media/docker)
 ```
 # cat /etc/yum.repos.d/
 docker.repo  ol7.repo
@@ -437,6 +437,8 @@ memo: for X86, if you have 8 cpus，the total cpu performance is 800%
 1 create weblogic container
 
 download server-jre-8u112-linux-x64.tar.gz and fmw_12.2.1.2.0_wls_Disk1_1of1.zip from oracle. <br>
+http://www.oracle.com/technetwork/middleware/weblogic/downloads/wls-for-dev-1703574.html  download the general version </br>
+http://www.oracle.com/technetwork/java/javase/downloads/server-jre8-downloads-2133154.html download the 8-112 version </br>
 download oracle image files from github: <br>
 https://github.com/oracle/docker-images <br>
 then untar the dockerfiles into node1 <br>
